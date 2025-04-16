@@ -30,7 +30,7 @@ append proc ; L, el
 	mov [ebx].node.next, eax
 	mov dl, [ebp+8]
 	mov [eax].node.sym, dl
-	mov [eax].node.next, nil
+	mov [eax].node.next, ecx
 	mov [eax].node.prev, ebx
 	
 	pop edx
@@ -133,9 +133,42 @@ check proc ; L; res in eax
 
 check endp
 
+
+del proc ; eax - адрес звена, которое надо удалить
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	push ecx
+	push edx
+	
+	
+	mov ebx, [eax].node.prev
+	mov ecx, [eax].node.next
+	
+	dispose eax
+	mov [ebx].node.next, ecx
+	mov [ecx].node.prev, ebx
+	
+	
+	
+	pop edx
+	pop ecx
+	pop ebx
+	
+	mov esp, ebp
+	pop ebp
+	ret
+
+
+del endp
+
+
+
 start:
 mov ebx, offset L
 mov L.prev, ebx
+mov L.next, ebx
 
 
 inp:
@@ -152,16 +185,25 @@ inp:
 	jmp inp
 st2:
 
+mov ecx, 5
+lp:
+	mov ebx, offset L
+	mov eax, [ebx].node.prev
+	call del
+	loop lp
 
+
+
+
+mov ebx, offset L
+mov ebx, [ebx].node.next
 outp:
 	mov al, [ebx].node.sym
+	cmp al, 0
+	jz fin
 	outchar al
 	
-	mov eax, [ebx].node.next
-	cmp eax, 0
-	jz fin
-	
-	mov ebx, eax
+	mov ebx, [ebx].node.next
 	jmp outp
 	
 
@@ -171,7 +213,7 @@ fin:
 newline
 mov ebx, offset L
 push ebx
-call check
+TotalHeapAllocated
 outu eax
 newline
 
