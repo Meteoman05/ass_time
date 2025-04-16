@@ -10,9 +10,29 @@ include console.inc
 		prev dd nil
 	node ends
 	
-	L node <>
+	beg dd ?
 	
 .code
+
+init proc ; eax на выход
+	push ebp
+	mov ebp, esp
+	
+	new sizeof node
+	
+	
+	mov [eax].node.sym, 0
+	mov [eax].node.prev, eax
+	mov [eax].node.next, eax
+	
+	mov esp, ebp
+	pop ebp
+	ret
+
+init endp
+
+
+
 append proc ; L, el
 	push ebp
 	mov ebp, esp
@@ -163,13 +183,38 @@ del proc ; eax - адрес звена, которое надо удалить
 
 del endp
 
+clear proc ; eax - адрес начала списка
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	push ecx
+	push edx
+	
+	mov edx, eax
+	mov ecx, 5
+	lp:
+		mov eax, [edx].node.prev
+		call del
+		dec ecx
+		cmp ecx, 0
+		jnz lp
+	
+	
 
+	pop edx
+	pop ecx
+	pop ebx
+	
+	mov esp, ebp
+	pop ebp
+	ret
+
+clear endp
 
 start:
-mov ebx, offset L
-mov L.prev, ebx
-mov L.next, ebx
-
+call init
+mov ebx, eax
 
 inp:
 	push ebx
@@ -186,16 +231,14 @@ inp:
 st2:
 
 mov ecx, 5
-lp:
-	mov ebx, offset L
-	mov eax, [ebx].node.prev
-	call del
-	loop lp
+mov beg, ebx
+mov eax, beg
+call clear
 
 
 
 
-mov ebx, offset L
+mov beg, ebx
 mov ebx, [ebx].node.next
 outp:
 	mov al, [ebx].node.sym
@@ -211,7 +254,7 @@ fin:
 
 
 newline
-mov ebx, offset L
+mov ebx, beg
 push ebx
 TotalHeapAllocated
 outu eax
