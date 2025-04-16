@@ -45,11 +45,10 @@ append proc ; L, el
 append endp
 
 
-check proc ; L
+check proc ; L; res in eax
 	push ebp
 	mov ebp, esp
 	
-	push eax
 	push ebx
 	push ecx
 	push edx
@@ -67,16 +66,63 @@ check proc ; L
 		loop long
 	skp:
 	
+	mov eax, 0
 	cmp ecx, 0
-	jz ok
-	outstr "Not ok"
-	ok:
-	outstr "Ok"
+	jnz cont
+	
+	; начинаем проверять последние элементы на признак останова
+	mov ebx, [ebp+8]
+	mov ebx, [ebx].node.prev ; в ebx ссылка на последний элемент
+	
+	mov dl, [ebx].node.sym
+	cmp dl, '@'
+	je @F
+	jmp cont
+	
+	@@:
+	mov ebx, [ebx].node.prev
+	mov dl, [ebx].node.sym
+	cmp dl, '%'
+	je @F
+	jmp cont
+	
+	@@:
+	mov ebx, [ebx].node.prev
+	mov dl, [ebx].node.sym
+	cmp dl, '#'
+	je @F
+	jmp cont
+	
+	@@:
+	mov ebx, [ebx].node.prev
+	mov dl, [ebx].node.sym
+	cmp dl, '%'
+	je @F
+	jmp cont
+	
+	@@:
+	mov ebx, [ebx].node.prev
+	mov dl, [ebx].node.sym
+	cmp dl, '@'
+	je @F
+	jmp cont
+	
+	@@:
+	mov eax, 1 ; по умолчанию случился останов
+	slash:
+	mov ebx, [ebx].node.prev
+	mov dl, [ebx].node.sym
+	cmp dl, '\'
+	jne cont
+	
+	xor eax, 1
+	jmp slash
+	
+	cont:
 	
 	pop edx
 	pop ecx
 	pop ebx
-	pop eax
 	
 	mov esp, ebp
 	pop ebp
@@ -93,12 +139,13 @@ mov L.prev, ebx
 
 
 inp:
-	xor eax, eax
-	inchar al
-	cmp al, '.'
+	push ebx
+	call check
+	cmp eax, 1
 	je st2
 	
-	
+	xor eax, eax
+	inchar al
 	push ebx
 	push ax
 	call append
@@ -125,6 +172,7 @@ newline
 mov ebx, offset L
 push ebx
 call check
+outu eax
 newline
 
 
