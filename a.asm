@@ -2,7 +2,8 @@ include console.inc
 
 .data
 	stop dd '%#%@'
-	bordword db "!?,;:'()[].", '"', 32, 9, 10, 13 ; 16
+	bordword db "!?,;:'()[].", '"', 32, 9, 10, 13, 0 ; 16
+	latin db "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",0
 	slst struc
 		s db 0
 		next dd 0
@@ -372,16 +373,28 @@ outwlst proc ; (link_lst)
 outwlst endp
 
 
-isbord proc ; (sym) -> eax
+ispat proc ; (sym, pattern) -> eax
 	push ebp
 	mov ebp, esp
 	
+	push ebx
 	push edi
 	mov edx, 0
 	cld
-	lea edi, bordword
+	
+	mov ecx, 0
+	mov ebx, [ebp+12]
+	@@:
+		cmp byte ptr [ebx+ecx], 0
+		jz @f
+		
+		inc ecx
+		jmp @b
+	@@:
+	
+
+	mov edi, ebx
 	mov eax, [ebp+8]
-	mov ecx, 16
 	repne scasb
 	jnz @f
 	mov edx, 1
@@ -389,11 +402,13 @@ isbord proc ; (sym) -> eax
 	mov eax, edx
 	
 	pop edi
+	pop ebx
 	
 	mov esp, ebp
 	pop ebp
-	ret 4
-isbord endp
+	ret 2*4
+ispat endp
+
 
 find_word proc ; (link_str) -> edx:eax
 	; edx - link to next sym after word or 0 (if end of global string)
@@ -405,9 +420,12 @@ find_word proc ; (link_str) -> edx:eax
 	
 	mov ebx, [ebp+8]
 	@@:
-		movzx eax, [ebx]
+		movzx eax, byte ptr [ebx]
 		push eax
-		call isbord
+		call 
+		test eax, eax
+		
+		
 		
 
 
