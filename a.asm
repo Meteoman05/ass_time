@@ -410,25 +410,121 @@ ispat proc ; (sym, pattern) -> eax
 ispat endp
 
 
+find_pat proc ; (link_str, pattern) -> eax
+	; eax - link to next sym after first sym
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	
+	mov eax, 0
+	mov ebx, [ebp+8]
+	mov ecx, 0
+	L:
+		mov edx, 0
+		mov dl, [ebx+ecx]
+		cmp dl, 0
+		jz cont
+		
+		push [ebp+12]
+		push edx
+		call ispat
+		test eax, eax
+		jnz found
+		jmp L
+	found:
+	add eax, ebx
+	add eax, ecx
+	cont:
+	pop ebx
+	
+	mov esp, ebp
+	pop ebp
+	ret 2*4
+find_pat endp
+
+
 find_word proc ; (link_str) -> edx:eax
 	; edx - link to next sym after word or 0 (if end of global string)
 	; eax - link to word
 	push ebp
 	mov ebp, esp
 	
+	sub esp, 4
+	loc_bool equ dword ptr [ebp-4]
 	push ebx
+	push esi
 	
 	mov ebx, [ebp+8]
-	@@:
-		movzx eax, byte ptr [ebx]
+	mov ecx, 0
+	L:
+		mov eax, 0
+		mov al, [ebx+ecx]
+		cmp al, 0
+		jz null
+		
+		pushad
+		push offset latin
 		push eax
-		call 
-		test eax, eax
+		call ispat
+		mov loc_bool, eax
+		popad
 		
+		cmp loc_bool, 0
+		jz nxt
 		
-		
-
-
+		inc ecx
+		jmp L
+	nxt:
+	pushad
+	push offset bordword
+	push eax
+	call ispat
+	mov loc_bool, eax
+	popad
+	
+	cmp loc_bool, 0
+	jz garb
+	
+	cmp ecx, 0
+	jz empty
+	
+	inc ecx
+	new ecx
+	dec ecx
+	
+	mov esi, ebx
+	add esi, ecx
+	mov byte ptr [eax+ecx], 0
+	write:
+		mov dl, [ebx+ecx-1]
+		mov [eax+ecx-1], dl
+		loop write
+	mov edx, esi
+	jmp fin
+	
+	garb:
+	mov eax, 0
+	mov edx, ebx
+	add edx, ecx
+	jmp fin
+	
+	empty:
+	mov eax, -1
+	mov edx, ebx
+	add edx, ecx
+	jmp fin
+	
+	null:
+	mov eax, 0
+	mov edx, 0
+	
+	fin:
+	pop esi
+	pop ebx
+	mov esp, ebp
+	pop ebp
+	ret 4
 find_word endp
 start:
 push offset len
