@@ -21,6 +21,7 @@ include console.inc
 	wlst ends
 	
 	wordlst wlst <>
+	wlen dd 0
 	
 	
 
@@ -35,6 +36,7 @@ inits proc ;(link_len_lst) -> eax
 	pop ebp
 	ret 4
 inits endp
+
 
 append proc ;(link_lst, link_len_lst, sym)
 	push ebp
@@ -68,6 +70,7 @@ append proc ;(link_lst, link_len_lst, sym)
 	ret 3*4
 append endp
 
+
 outlst proc ;(link_lst)
 	push ebp
 	mov ebp, esp
@@ -90,6 +93,7 @@ outlst proc ;(link_lst)
 	pop ebp
 	ret 4
 outlst endp
+
 
 readi proc ;(buffer1, buffer2) -> edx:eax
 	push ebp
@@ -137,6 +141,7 @@ readi proc ;(buffer1, buffer2) -> edx:eax
 	pop ebp
 	ret 2*4
 readi endp
+
 
 input proc ; (link_lst, link_len_lst)
 	push ebp
@@ -229,6 +234,7 @@ input proc ; (link_lst, link_len_lst)
 	ret 2*4
 input endp
 
+
 lst_to_arr proc ;(link_lst, len_lst) -> eax
 	push ebp
 	mov ebp, esp
@@ -264,6 +270,7 @@ lst_to_arr proc ;(link_lst, len_lst) -> eax
 	ret 2*4
 lst_to_arr endp
 
+
 print proc ; (link_str)
 	; normal variant of OUTSTR
 	push ebp
@@ -285,6 +292,7 @@ print proc ; (link_str)
 	pop ebp
 	ret 4
 print endp
+
 
 putw proc ; (link_lst, link_word) -> eax
 	; eax - 1, if word was in list
@@ -317,6 +325,17 @@ putw proc ; (link_lst, link_word) -> eax
 			jz check
 			mov eax, 0
 		cont:
+		push edx
+		mov edx, 0
+		mov dl, byte ptr [esi]
+		mov dh, byte ptr [edi]
+		add dl, dh
+		cmp dl, 0
+		jz @f
+		mov eax, 0
+		@@:
+		pop edx
+		
 		test eax, eax
 		jnz old
 		mov ebx, [ebx].next
@@ -347,6 +366,7 @@ putw proc ; (link_lst, link_word) -> eax
 	pop ebp
 	ret 2*4
 putw endp
+
 
 outwlst proc ; (link_lst)
 	push ebp
@@ -597,6 +617,126 @@ fwords proc ; (link_str, link_lst)
 fwords endp
 
 
+cmpstr proc ; (link_str1, link_str2) -> eax
+	; true, if str1 < str2
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	
+	mov ebx, [ebp+8]
+	mov edx, [ebp+12]
+	mov ecx, 0
+	L:
+		mov al, [ebx+ecx]
+		cmp al, [edx+ecx]
+		ja inv
+		jb up
+		
+		inc ecx
+		jmp L
+	
+	inv:
+	mov eax, 0
+	jmp fin
+	up:
+	mov eax, 1
+	fin:
+	pop ebx
+	
+	mov esp, ebp
+	pop ebp
+	ret 2*4
+cmpstr endp
+
+
+get_lenw proc ; (link_lst) -> eax
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	
+	assume ebx:ptr wlst
+	mov eax, 0
+	mov ebx, [ebp+8]
+	L:
+		cmp [ebx].wrd, 0
+		jz fin
+		
+		inc eax
+		mov ebx, [ebx].next
+		jmp L
+	fin:
+	assume ebx:nothing
+	pop ebx
+	
+	mov esp, ebp
+	pop ebp
+	ret 4
+get_lenw endp
+
+
+sort1 proc ; (link_lst, len)
+	push ebp
+	mov ebp, esp
+	
+	sub esp, 4
+	sort1_a equ dword ptr [ebp-4]
+	mov sort1_a, 0
+	push ebx
+	
+	assume ebx:ptr wlst
+	assume edx:ptr wlst
+	mov eax, 0
+	mov ebx, [ebp+8]
+	mov edx, [ebx].next
+	mov ecx, [ebp+12]
+	dec ecx
+	L:
+		cmp ecx, 0
+		jle fin
+		
+		mov eax, [ebx].freq
+		cmp eax, [edx].freq
+		ja swap
+		jb cont
+		
+		pushad
+		push [edx].wrd
+		push [ebx].wrd
+		assume ebx:nothing
+		assume edx:nothing
+		call cmpstr
+		assume ebx:ptr wlst
+		assume edx:ptr wlst
+		mov sort1_a, eax
+		popad
+		
+		cmp sort1_a, 0
+		je swap
+		jmp cont
+		swap:
+		mov eax, [ebx].wrd
+		xchg eax, [edx].wrd
+		mov [ebx].wrd, eax
+		
+		mov eax, [ebx].freq
+		xchg eax, [edx].freq
+		mov [ebx].freq, eax
+		
+		cont:
+		mov ebx, edx
+		mov edx, [ebx].next
+		dec ecx
+		jmp L
+	fin:
+	assume ebx:nothing
+	assume edx:nothing
+	pop ebx
+	mov esp, ebp
+	pop ebp
+	ret 2*4
+sort1 endp 
 start:
 push offset len
 call inits
@@ -629,14 +769,42 @@ newline
 push arr
 call print
 newline
+newline
 
 push offset wordlst
 push arr
 call fwords
 
+;push offset wordlst
+;call outwlst
+;newline
+;outstrln "==============="
+;newline
+
+push offset wordlst
+call get_lenw
+mov wlen, eax
+
+mov ecx, wlen
+@@:
+	push ecx
+	push wlen
+	push offset wordlst
+	call sort1
+	
+	;push offset wordlst
+	;call outwlst
+	;newline
+	;outstrln "------------"
+	
+	pop ecx
+	dec ecx
+	cmp ecx, 0
+	jnz @b
+
 push offset wordlst
 call outwlst
-
+newline
 
 
 outstrln 'All is ok'
