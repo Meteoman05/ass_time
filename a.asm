@@ -20,6 +20,8 @@ include console.inc
 		prev dd 0
 	wlst ends
 	
+	wordlst wlst <>
+	
 	
 
 .code
@@ -429,11 +431,14 @@ find_pat proc ; (link_str, pattern) -> eax
 		cmp dl, 0
 		jz cont
 		
+		push ecx
 		push [ebp+12]
 		push edx
 		call ispat
+		pop ecx
 		test eax, eax
 		jnz found
+		inc ecx
 		jmp L
 	found:
 	add eax, ebx
@@ -535,9 +540,63 @@ find_word endp
 
 
 fwords proc ; (link_str, link_lst)
+	push ebp
+	mov ebp, esp
 	
+	sub esp, 4
+	loc_b equ dword ptr [ebp-4]
+	mov loc_b, 0
+	push ebx
+	
+	mov ebx, [ebp+12]
+	mov edx, [ebp+8]
+	mov ecx, 0
+	mov eax, 0
+	L:
+		inc ecx
+		cmp eax, 0
+		jz eax0
+		
+		cmp eax, -1
+		je eaxm1
+		
+		pushad
+		push eax
+		push [ebp+12]
+		call putw
+		mov loc_b, eax
+		popad
+		
+		cmp loc_b, 0
+		jz @f
+		dispose eax ; удаляем, если слово уже было в списке
+		@@:
+		jmp next_word
+		
+		eax0:
+		
+		cmp edx, 0
+		jz fin
+		
+		push offset bordword
+		push edx
+		call find_pat
+		cmp eax, 0
+		jz fin
+		mov edx, eax
+		eaxm1:
+		next_word:
+		push edx
+		call find_word
+		jmp L
+	fin:
+	pop ebx
+	mov esp, ebp
+	pop ebp
 	ret 2*4
 fwords endp
+
+
 start:
 push offset len
 call inits
@@ -565,8 +624,21 @@ mov arr, eax
 
 push arr
 call print
-
 newline
+
+push arr
+call print
+newline
+
+push offset wordlst
+push arr
+call fwords
+
+push offset wordlst
+call outwlst
+
+
+
 outstrln 'All is ok'
 exit 0
 ERR:
