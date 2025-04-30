@@ -284,7 +284,8 @@ print proc ; (link_str)
 	ret 4
 print endp
 
-putw proc ; (link_lst, link_word)
+putw proc ; (link_lst, link_word) -> eax
+	; eax - 1, if word was in list
 	push ebp
 	mov ebp, esp
 	
@@ -320,6 +321,7 @@ putw proc ; (link_lst, link_word)
 		jmp lp
 	old:
 	inc dword ptr [ebx].freq
+	mov eax, 1
 	jmp fin
 	new_word:
 	mov [ebx].wrd, edx
@@ -331,6 +333,7 @@ putw proc ; (link_lst, link_word)
 	mov [eax].wlst.next, 0
 	mov [eax].wlst.wrd, 0
 	mov [eax].wlst.freq, 0
+	mov eax, 0
 	
 	fin:
 	assume ebx:nothing
@@ -501,18 +504,21 @@ find_word proc ; (link_str) -> edx:eax
 		mov [eax+ecx-1], dl
 		loop write
 	mov edx, esi
+	inc edx
 	jmp fin
 	
 	garb:
 	mov eax, 0
 	mov edx, ebx
 	add edx, ecx
+	inc edx
 	jmp fin
 	
 	empty:
 	mov eax, -1
 	mov edx, ebx
 	add edx, ecx
+	inc edx
 	jmp fin
 	
 	null:
@@ -526,6 +532,12 @@ find_word proc ; (link_str) -> edx:eax
 	pop ebp
 	ret 4
 find_word endp
+
+
+fwords proc ; (link_str, link_lst)
+	
+	ret 2*4
+fwords endp
 start:
 push offset len
 call inits
