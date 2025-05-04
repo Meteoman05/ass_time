@@ -23,6 +23,20 @@ include console.inc
 	wordlst wlst <>
 	wlen dd 0
 	
+	numlist struc
+		n dd 0
+		next dd 0
+	numlist ends
+	
+	coords numlist <>
+	
+	last_w dd ?
+	
+	cutword dd ?
+	pasteword dd ?
+	len_old dd ?
+	len_delt dd ?
+	
 	
 
 .code
@@ -650,7 +664,9 @@ cmpstr proc ; (link_str1, link_str2) -> eax
 cmpstr endp
 
 
-get_lenw proc ; (link_lst) -> eax
+get_lenwlst proc ; (link_lst) -> edx:eax
+	; eax - len
+	; edx - link to last element
 	push ebp
 	mov ebp, esp
 	
@@ -664,6 +680,7 @@ get_lenw proc ; (link_lst) -> eax
 		jz fin
 		
 		inc eax
+		mov edx, ebx
 		mov ebx, [ebx].next
 		jmp L
 	fin:
@@ -673,7 +690,7 @@ get_lenw proc ; (link_lst) -> eax
 	mov esp, ebp
 	pop ebp
 	ret 4
-get_lenw endp
+get_lenwlst endp
 
 
 sort1 proc ; (link_lst, len)
@@ -737,6 +754,313 @@ sort1 proc ; (link_lst, len)
 	pop ebp
 	ret 2*4
 sort1 endp 
+
+
+get_lenw proc ;(link_word) -> eax
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	
+	mov ebx, [ebp+8]
+	mov ecx, 0
+	L:
+		mov al, [ebx+ecx]
+		cmp al, 0
+		jz @f
+		
+		inc ecx
+		jmp L
+	@@:
+	mov eax, ecx
+	pop ebx
+	mov esp, ebp
+	pop ebp
+	ret 4
+get_lenw endp
+
+
+find_substr proc ;(link_str, link_word) -> edx:eax
+	; eax - adress of first sym in word, 0 - null has been reached
+	; edx - adress of next sym after word in text
+	push ebp
+	mov ebp, esp
+	
+	sub esp, 8
+	loc_len equ dword ptr [ebp-4]
+	loc_sym equ byte ptr [ebp-8]
+	push ebx
+	push esi
+	push edi
+	cld
+	
+	push [ebp+12]
+	call get_lenw
+	mov loc_len, eax
+	
+	mov ebx, [ebp+8]
+	mov esi, [ebp+12]
+	mov al, byte ptr [esi]
+	mov loc_sym, al ; first sym of word
+	
+	L:
+		xor eax, eax
+		mov al, [ebx]
+		cmp al, 0
+		jz fin
+		
+		cmp al, loc_sym
+		jne cont_nchk
+		
+		mov ecx, loc_len
+		mov esi, [ebp+12]
+		mov edi, ebx
+		
+		repe cmpsb
+		jnz cont
+		
+		mov edx, loc_len
+		add edx, ebx
+		mov eax, ebx
+		jmp fin
+		
+		cont:
+		dec edi
+		mov al, [edi]
+		cmp al, 0
+		jz fin
+		cont_nchk:
+		inc ebx
+		jmp L
+	
+	fin:
+	pop edi
+	pop esi
+	pop ebx
+	mov esp, ebp
+	pop ebp
+	ret 2*4
+find_substr endp
+
+
+appendn proc ; (link_lst, num)
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	
+	assume eax:ptr numlist
+	assume ebx:ptr numlist
+	mov ebx, [ebp+8]
+	L:
+		mov eax, [ebx].next
+		cmp eax, 0
+		cmovnz ebx, eax
+		jnz L
+		
+		mov edx, [ebp+12]
+		mov [ebx].n, edx
+		
+		new sizeof numlist
+		mov [ebx].next, eax
+		
+		mov [eax].n, 0
+		mov [eax].next, 0
+	
+	assume ebx:nothing
+	assume eax:nothing
+	pop ebx
+	mov esp, ebp
+	pop ebp	
+	ret 2*4
+appendn endp
+
+
+out_numlist proc ; (link_lst)
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	
+	assume ebx:ptr numlist
+	mov ebx, [ebp+8]
+	L:
+		mov edx, [ebx].next
+		cmp edx, 0
+		jz @f
+		
+		outwordln [ebx].n
+		mov ebx, edx
+		jmp L
+	@@:
+	assume ebx:nothing
+	pop ebx
+	mov esp, ebp
+	pop ebp	
+	ret 4
+out_numlist endp
+
+
+numin proc ; (link_lst, num) -> eax
+	; eax - 0, if num not in list
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	assume ebx:ptr numlist
+	mov ebx, [ebp+8]
+	mov edx, [ebp+12]
+	L:
+		mov eax, [ebx].next
+		cmp eax, 0
+		jz @f
+
+		cmp [ebx].n, edx
+		je @f
+		
+		mov ebx, eax
+		jmp L
+	@@:
+	assume ebx:nothing
+	pop ebx
+	mov esp, ebp
+	pop ebp
+	ret 2*4
+numin endp
+
+
+replace proc ; (link_str (old word), link_new_word, len_old) -> eax
+	; eax - adress of next sym after old word
+	push ebp
+	mov ebp, esp
+	
+	push ebx
+	
+	mov ebx, [ebp+8]
+	mov edx, [ebp+12]
+	mov ecx, 0
+	L:
+		mov al, [edx+ecx]
+		cmp al, 0
+		jz @f
+		
+		mov [ebx+ecx], al
+		inc ecx
+		jmp L
+	@@:
+	mov eax, [ebp+16]
+	add eax, ebx
+	
+	pop ebx
+	mov esp, ebp
+	pop ebp	
+	ret 3*4
+replace endp
+
+
+replace_text proc ; (text, word, len_old, link_lst) -> eax
+	; eax - number of replacements
+	push ebp
+	mov ebp, esp
+	
+	sub esp, 4
+	mov dword ptr [ebp-4], 0
+	push ebx
+	
+	mov ebx, [ebp+8]
+	L:
+		mov al, [ebx]
+		cmp al, 0
+		jz @f
+		
+		push ebx
+		push [ebp+20]
+		call numin
+
+		cmp eax, 0
+		jz cont
+		
+		push [ebp+16]
+		push [ebp+12]
+		push ebx
+		call replace
+		mov ebx, eax
+		dec ebx
+		inc dword ptr [ebp-4]
+		
+		cont:
+		inc ebx
+		jmp L
+	@@:
+	mov eax, [ebp-4]
+	pop ebx
+	mov esp, ebp
+	pop ebp	
+	ret 4*4
+replace_text endp
+
+
+new_text proc ; (text, link_lst, len_delt, len_new_word, num_of_replaces) -> eax
+	; eax - link to new text
+	push ebp
+	mov ebp, esp
+	
+	sub esp, 4
+	
+	push ebx	
+	push esi
+	push edi
+	
+	push [ebp+8]
+	call get_lenw
+	mov ecx, [ebp+24]
+	@@:
+		sub eax, [ebp+16]
+		loop @b
+	inc eax
+	
+	new eax
+	mov [ebp-4], eax
+	mov esi, [ebp+8]
+	mov edi, eax
+
+	L:
+		mov dl, [esi]
+		cmp dl, 0
+		jz fin
+		
+		push edx
+		push esi
+		push [ebp+12]
+		call numin
+		pop edx
+		
+		test eax, eax
+		jnz worddd
+		
+		mov [edi], dl
+		jmp cont
+
+		worddd:
+		mov ecx, [ebp+20]
+		rep movsb
+		
+		add esi, [ebp+16]
+		dec esi
+		dec edi
+		
+		cont:
+		cmpsb
+		jmp L
+	fin:
+	mov eax, [ebp-4]
+	pop edi
+	pop esi
+	pop ebx
+	mov esp, ebp
+	pop ebp	
+	ret 5*4
+new_text endp
 start:
 push offset len
 call inits
@@ -775,14 +1099,8 @@ push offset wordlst
 push arr
 call fwords
 
-;push offset wordlst
-;call outwlst
-;newline
-;outstrln "==============="
-;newline
-
 push offset wordlst
-call get_lenw
+call get_lenwlst
 mov wlen, eax
 
 mov ecx, wlen
@@ -792,18 +1110,113 @@ mov ecx, wlen
 	push offset wordlst
 	call sort1
 	
-	;push offset wordlst
-	;call outwlst
-	;newline
-	;outstrln "------------"
-	
 	pop ecx
 	dec ecx
 	cmp ecx, 0
 	jnz @b
 
 push offset wordlst
+call get_lenwlst
+mov edx, [edx].wlst.wrd
+mov last_w, edx
+
+push offset wordlst
 call outwlst
+newline
+
+push last_w
+call get_lenw
+mov ebx, eax
+
+push wordlst.wrd
+call get_lenw
+outu eax
+
+cmp ebx, eax
+ja @f
+mov len_old, eax
+mov len_delt, eax
+sub len_delt, ebx
+
+mov eax, wordlst.wrd
+mov cutword, eax
+
+mov eax, last_w
+mov pasteword, eax
+
+jmp deter
+@@:
+mov len_old, ebx
+mov len_delt, ebx
+sub len_delt, eax
+
+mov eax, last_w
+mov cutword, eax
+
+mov eax, wordlst.wrd
+mov pasteword, eax
+
+deter:
+outstr "len_old: "
+outu len_old
+newline
+
+outstr "len_delt: "
+outu len_delt
+newline
+pause "Checkpoint"
+
+
+
+mov ebx, arr
+srch:
+	mov al, [ebx]
+	cmp al, 0
+	jz @f
+	
+	push cutword
+	push ebx
+	call find_substr
+	
+	mov ebx, edx
+	
+	cmp eax, 0
+	jz @f
+	
+	push eax
+	push offset coords
+	call appendn
+	
+	jmp srch
+@@:
+
+push offset coords
+push len_old
+push pasteword
+push arr
+call replace_text
+
+
+
+mov ebx, len_old
+sub ebx, len_delt ; len of new word
+
+push eax
+push ebx
+push len_delt
+push offset coords
+push arr
+call new_text
+
+mov ebx, eax
+mov ecx, arr
+dispose ecx
+
+mov arr, ebx
+newline
+
+push arr
+call print
 newline
 
 
