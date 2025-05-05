@@ -40,6 +40,17 @@ include console.inc
 	
 
 .code
+cng macro col
+	local mark
+	push ebx
+	mov ebx, col
+	cmp ebx, 0
+	jz mark
+	SetTextAttr ebx
+	mark:
+	pop ebx
+endm
+
 inits proc ;(link_len_lst) -> eax
 	push ebp
 	mov ebp, esp
@@ -290,6 +301,8 @@ print proc ; (link_str)
 	push ebp
 	mov ebp, esp
 	
+	push ebx
+	
 	mov eax, [ebp+8]
 	mov ecx, 0
 	@@:
@@ -297,11 +310,15 @@ print proc ; (link_str)
 		cmp dl, 0
 		jz @f
 		
+		pushad
+		lea eax, [@Random(15)]
+		cng eax
+		popad
 		outchar dl
 		inc ecx
 		jmp @b
 	@@:
-	
+	pop ebx
 	mov esp, ebp
 	pop ebp
 	ret 4
@@ -780,15 +797,16 @@ get_lenw proc ;(link_word) -> eax
 get_lenw endp
 
 
-find_substr proc ;(link_str, link_word) -> edx:eax
+find_substr proc ;(link_str, link_word, bordword) -> edx:eax
 	; eax - adress of first sym in word, 0 - null has been reached
 	; edx - adress of next sym after word in text
 	push ebp
 	mov ebp, esp
 	
-	sub esp, 8
+	sub esp, 12
 	loc_len equ dword ptr [ebp-4]
 	loc_sym equ byte ptr [ebp-8]
+	loc_res equ dword ptr [ebp-12]
 	push ebx
 	push esi
 	push edi
@@ -812,12 +830,35 @@ find_substr proc ;(link_str, link_word) -> edx:eax
 		cmp al, loc_sym
 		jne cont_nchk
 		
+		pushad
+		mov al, [ebx-1]
+		push [ebp+16]
+		push eax
+		call ispat
+		mov loc_res, eax
+		popad
+		
+		cmp loc_res, 1
+		jne cont_nchk
+		
 		mov ecx, loc_len
 		mov esi, [ebp+12]
 		mov edi, ebx
 		
 		repe cmpsb
 		jnz cont
+		
+		pushad
+		xor eax, eax
+		mov al, byte ptr [edi]
+		push [ebp+16]
+		push eax
+		call ispat
+		mov loc_res, eax
+		popad
+		
+		cmp loc_res, 1
+		jne cont_nchk
 		
 		mov edx, loc_len
 		add edx, ebx
@@ -839,7 +880,7 @@ find_substr proc ;(link_str, link_word) -> edx:eax
 	pop ebx
 	mov esp, ebp
 	pop ebp
-	ret 2*4
+	ret 3*4
 find_substr endp
 
 
@@ -1061,7 +1102,18 @@ new_text proc ; (text, link_lst, len_delt, len_new_word, num_of_replaces) -> eax
 	pop ebp	
 	ret 5*4
 new_text endp
+
+
 start:
+Randomize
+msgbox "Greetings","Hello! Enter your text and finish it with '@%#%@' combination. Text shouldn't be empty! Do you want to get more information about sheilding?", MB_YESNO+MB_ICONASTERISK
+cmp eax, IDNO
+je @f
+msgbox "Sheilding", "If you have to save '@%#%@' combination, you need to put '\' (backslash) before. Pair of backslashes will be interpretted as one symbol.", MB_OK+MB_ICONQUESTION
+
+@@:
+outstrln "Enter your text!"
+newline
 push offset len
 call inits
 mov lst, eax
@@ -1069,31 +1121,27 @@ mov lst, eax
 push offset len
 push lst
 call input
+newline
+newline
+
 
 mov eax, lst
 mov al, [eax].slst.s
 test al, al
 jz ERR
 
-newline
-newline
-push lst
-call outlst
-newline
-newline
 push len
 push lst
 call lst_to_arr
 mov arr, eax
 
+comment *
+outstrln "Old text: "
 push arr
 call print
 newline
-
-push arr
-call print
 newline
-newline
+*
 
 push offset wordlst
 push arr
@@ -1102,6 +1150,9 @@ call fwords
 push offset wordlst
 call get_lenwlst
 mov wlen, eax
+
+cmp wlen, 0
+jz NO_WORDS
 
 mov ecx, wlen
 @@:
@@ -1120,17 +1171,12 @@ call get_lenwlst
 mov edx, [edx].wlst.wrd
 mov last_w, edx
 
-push offset wordlst
-call outwlst
-newline
-
 push last_w
 call get_lenw
 mov ebx, eax
 
 push wordlst.wrd
 call get_lenw
-outu eax
 
 cmp ebx, eax
 ja @f
@@ -1144,6 +1190,7 @@ mov cutword, eax
 mov eax, last_w
 mov pasteword, eax
 
+msgbox "Transformation", "The most rare word will be replaced with the most common word!", MB_OK+MB_ICONASTERISK
 jmp deter
 @@:
 mov len_old, ebx
@@ -1156,17 +1203,8 @@ mov cutword, eax
 mov eax, wordlst.wrd
 mov pasteword, eax
 
+msgbox "Transformation", "The most common word will be replaced with the most rare word!", MB_OK+MB_ICONASTERISK
 deter:
-outstr "len_old: "
-outu len_old
-newline
-
-outstr "len_delt: "
-outu len_delt
-newline
-pause "Checkpoint"
-
-
 
 mov ebx, arr
 srch:
@@ -1174,6 +1212,7 @@ srch:
 	cmp al, 0
 	jz @f
 	
+	push offset bordword
 	push cutword
 	push ebx
 	call find_substr
@@ -1197,7 +1236,6 @@ push arr
 call replace_text
 
 
-
 mov ebx, len_old
 sub ebx, len_delt ; len of new word
 
@@ -1213,16 +1251,41 @@ mov ecx, arr
 dispose ecx
 
 mov arr, ebx
-newline
 
-push arr
+outstrln "New text:"
+newline
+mov eax, arr
+push eax
 call print
 newline
+newline
+
+outstrln "========================="
+outstrln "Word list:"
+newline
+push offset wordlst
+call outwlst
+newline
+newline
 
 
-outstrln 'All is ok'
+msgbox "Finish", "Program have finished correctly!"
+outstrln "Exit code: 0"
 exit 0
 ERR:
-	outstrln 'Illegal input!!!'
+	msgbox "ERROR", "Error! Your text is empty!", MB_OK+MB_ICONSTOP
+	outstrln "Exit code: -1"
 	exit -1
+NO_WORDS:
+	msgbox "Degenerate", "Your text doesn't contain any word. It can't be transformed by rule #6!", MB_OK+MB_ICONEXCLAMATION
+	outstrln "Text without changes:"
+	newline
+	mov eax, arr
+	push eax
+	call print
+	newline
+	newline
+
+	outstrln "Exit code: 0"
+	exit 0
 end start
